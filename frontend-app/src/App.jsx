@@ -25,6 +25,8 @@ const initialState = {
     schedule: [],
     isScheduleLoading: false,
     
+    searchTerm: '',
+    
     currentCourseToEdit: null, 
     formMessage: { type: '', text: '' },
     courseFormData: defaultFormData,
@@ -42,7 +44,7 @@ function courseReducer(state, action) {
         case 'SET_AUTH_VIEW':
             return { ...state, authView: action.payload, authError: null };
         case 'AUTH_START':
-            return { ...state, authError: null }; // We can add an authLoading state if desired
+            return { ...state, authError: null };
         case 'AUTH_SUCCESS':
             localStorage.setItem('token', action.payload.token);
             localStorage.setItem('user', JSON.stringify(action.payload.user));
@@ -104,6 +106,9 @@ function courseReducer(state, action) {
         case 'ENROLL_SUCCESS':
         case 'DROP_SUCCESS':
             return { ...state, schedule: action.payload.schedule };
+            
+        case 'SET_SEARCH_TERM':
+            return { ...state, searchTerm: action.payload };
             
         default:
             return state;
@@ -190,7 +195,7 @@ const CourseCard = ({ course, user, isEnrolled, onEdit, onDelete, onEnroll, onDr
                 </span>
                 
                 <div className="space-x-2">
-                    {user && user.role === 'teacher' && onEdit && (
+                    {user && user.role === 'teacher' && onEdit && course.createdBy === user._id && (
                         <button
                             onClick={() => onEdit(course)}
                             className="text-indigo-600 bg-indigo-100 p-2 rounded-full hover:bg-indigo-200 transition duration-150 shadow-md"
@@ -198,7 +203,7 @@ const CourseCard = ({ course, user, isEnrolled, onEdit, onDelete, onEnroll, onDr
                             Edit
                         </button>
                     )}
-                    {user && user.role === 'teacher' && onDelete && (
+                    {user && user.role === 'teacher' && onDelete && course.createdBy === user._id && (
                         <button
                             onClick={() => onDelete(course._id, course.name)}
                             className="text-red-600 bg-red-100 p-2 rounded-full hover:bg-red-200 transition duration-150 shadow-md"
@@ -234,17 +239,7 @@ const CourseCard = ({ course, user, isEnrolled, onEdit, onDelete, onEnroll, onDr
     );
 };
 
-const CourseList = ({ loading, error, courses, user, schedule, handleEditClick, handleDelete, handleEnroll }) => {
-    if (loading) {
-        return <p className="text-gray-600 p-8 text-center text-lg">Loading courses...</p>;
-    }
-    if (error) {
-        return <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md m-4" role="alert">{error}</div>;
-    }
-    if (courses.length === 0) {
-        return <p className="text-gray-600 p-8 text-center text-lg">No courses found. {user && user.role === 'teacher' ? 'Click "Add New Course" to begin.' : ''}</p>;
-    }
-
+const CourseList = ({ courses, user, schedule, handleEditClick, handleDelete, handleEnroll }) => {
     const enrolledCourseIds = new Set(schedule.map(c => c._id));
 
     return (
@@ -281,7 +276,7 @@ const ScheduleList = ({ loading, error, schedule, handleDrop }) => {
                 <CourseCard
                     key={course._id}
                     course={course}
-                    user={{ role: 'student' }} // Mock user to show student controls
+                    user={{ role: 'student' }}
                     onDrop={handleDrop}
                 />
             ))}
@@ -310,7 +305,6 @@ const CourseForm = ({ currentCourseToEdit, formMessage, courseFormData, handleFo
                 )}
 
                 <form onSubmit={handleFormSubmit} className="space-y-4">
-                    {/* ... (Form fields - no changes from your original code) ... */}
                     <div className="grid grid-cols-2 gap-4">
                          <div>
                              <label className="block text-sm font-medium text-gray-700">Course Name*</label>
@@ -431,7 +425,7 @@ const App = () => {
         courses, loading, error, isFormOpen, activeView, 
         currentCourseToEdit, formMessage, courseFormData,
         user, token, isAuthModalOpen, authView, authError,
-        schedule, isScheduleLoading
+        schedule, isScheduleLoading, searchTerm
     } = state;
 
     const fetchCourses = useCallback(async () => {
@@ -607,6 +601,15 @@ const App = () => {
         }
     };
 
+    const filteredCourses = courses.filter(course => {
+        const term = searchTerm.toLowerCase();
+        const nameMatch = course.name.toLowerCase().includes(term);
+        const subjectMatch = course.subject.toLowerCase().includes(term);
+        const numberMatch = course.number.toString().includes(term); 
+        
+        return nameMatch || subjectMatch || numberMatch;
+    });
+
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
             <NavBar user={user} activeView={activeView} dispatch={dispatch} />
@@ -625,7 +628,7 @@ const App = () => {
                     <>
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-semibold text-gray-800">
-                                {loading ? 'Loading...' : `${courses.length} Courses Listed`}
+                                {loading ? 'Loading...' : `${filteredCourses.length} Courses Found`}
                             </h2>
                             {user && user.role === 'teacher' && (
                                 <button
@@ -637,18 +640,36 @@ const App = () => {
                             )}
                         </div>
                         
+                        <div className="mb-6">
+                            <input
+                                type="text"
+                                placeholder="Search by name, subject, or number..."
+                                value={searchTerm}
+                                onChange={(e) => dispatch({ type: 'SET_SEARCH_TERM', payload: e.target.value })}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border"
+                            />
+                        </div>
+                        
                         <MainMessage isFormOpen={isFormOpen} formMessage={formMessage} />
 
-                        <CourseList 
-                            loading={loading}
-                            error={error}
-                            courses={courses}
-                            user={user}
-                            schedule={schedule}
-                            handleEditClick={handleEditClick}
-                            handleDelete={handleDelete}
-                            handleEnroll={handleEnroll}
-                        />
+                        {loading ? (
+                            <p className="text-gray-600 p-8 text-center text-lg">Loading courses...</p>
+                        ) : error ? (
+                             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md m-4" role="alert">{error}</div>
+                        ) : filteredCourses.length === 0 ? (
+                            <p className="text-gray-600 p-8 text-center text-lg">
+                                {searchTerm ? "No courses match your search." : "No courses found."}
+                            </p>
+                        ) : (
+                            <CourseList 
+                                courses={filteredCourses}
+                                user={user}
+                                schedule={schedule}
+                                handleEditClick={handleEditClick}
+                                handleDelete={handleDelete}
+                                handleEnroll={handleEnroll}
+                            />
+                        )}
                     </>
                 )}
                 
