@@ -1,40 +1,30 @@
 import React, { useEffect, useCallback, useReducer } from 'react';
+import './App.css'
 
-// The base URL for your Express backend
-// Update this when you deploy to Render!
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = 'https://backend-sdev255-final-project.onrender.com/api';
 
-// MOCK: For Stage 1, we assume the user is a Teacher with full CRUD access.
 const MOCK_USER_ROLE = 'teacher'; 
 
-// Default state for the course form inputs
 const defaultFormData = { name: '', subject: '', number: '', description: '', credits: 3 };
 
-// --- 1. INITIAL STATE ---
 const initialState = {
-    // Data State
     courses: [],
     loading: true,
     error: null,
     
-    // UI/Navigation State
     activeView: 'catalog',
     
-    // Form State
     isFormOpen: false,
-    currentCourseToEdit: null, // Course object being edited (null for add)
-    formMessage: { type: '', text: '' }, // Feedback message inside modal
-    courseFormData: defaultFormData, // Form fields
+    currentCourseToEdit: null, 
+    formMessage: { type: '', text: '' },
+    courseFormData: defaultFormData,
 };
 
-// --- 2. REDUCER FUNCTION ---
 function courseReducer(state, action) {
     switch (action.type) {
-        // --- Navigation ---
         case 'SET_VIEW':
             return { ...state, activeView: action.payload, error: null };
             
-        // --- Data Fetching ---
         case 'FETCH_START':
             return { ...state, loading: true, error: null };
         case 'FETCH_SUCCESS':
@@ -42,7 +32,6 @@ function courseReducer(state, action) {
         case 'FETCH_FAILURE':
             return { ...state, loading: false, error: action.payload };
 
-        // --- Form/Modal Management ---
         case 'OPEN_ADD_FORM':
             return {
                 ...state,
@@ -56,7 +45,6 @@ function courseReducer(state, action) {
                 ...state,
                 isFormOpen: true,
                 currentCourseToEdit: action.payload,
-                // Use spread operator to ensure courseFormData is a copy
                 courseFormData: { ...action.payload }, 
                 formMessage: { type: '', text: '' },
             };
@@ -69,26 +57,37 @@ function courseReducer(state, action) {
                 formMessage: { type: '', text: '' },
             };
 
-        // --- CRUD Lifecycle & Form Input ---
         case 'SET_FORM_MESSAGE':
             return { ...state, formMessage: action.payload };
             
         case 'SET_FORM_FIELD':
-             // Handles changes to individual form fields
              return { 
-                ...state, 
-                courseFormData: { 
-                    ...state.courseFormData, 
-                    [action.field]: action.value 
-                } 
+                 ...state, 
+                 courseFormData: { 
+                     ...state.courseFormData, 
+                     [action.field]: action.value 
+                 } 
              };
 
         case 'COURSE_DELETED_SUCCESS':
             return {
                 ...state,
-                // Update courses by filtering out the deleted one
                 courses: state.courses.filter(c => c._id !== action.payload.courseId),
                 formMessage: { type: 'success', text: action.payload.message },
+            };
+            
+        case 'COURSE_ADDED_SUCCESS':
+            return {
+                ...state,
+                courses: [...state.courses, action.payload],
+            };
+        
+        case 'COURSE_UPDATED_SUCCESS':
+            return {
+                ...state,
+                courses: state.courses.map(course => 
+                    course._id === action.payload._id ? action.payload : course
+                ),
             };
             
         default:
@@ -96,21 +95,13 @@ function courseReducer(state, action) {
     }
 }
 
-/**
- * Main application component for Course Management.
- * Fetches, displays, and allows adding/editing/deleting courses (Teacher CRUD).
- */
 const App = () => {
-    // --- 3. REPLACE useState with useReducer ---
     const [state, dispatch] = useReducer(courseReducer, initialState);
     
-    // Destructure necessary state variables for cleaner access
     const { 
         courses, loading, error, isFormOpen, activeView, 
         currentCourseToEdit, formMessage, courseFormData 
     } = state;
-
-    // --- Data Fetching (useCallback is still useful here) ---
 
     const fetchCourses = useCallback(async () => {
         dispatch({ type: 'FETCH_START' });
@@ -123,7 +114,7 @@ const App = () => {
             dispatch({ type: 'FETCH_SUCCESS', payload: data });
         } catch (e) {
             console.error("Failed to fetch courses:", e);
-            dispatch({ type: 'FETCH_FAILURE', payload: "Could not connect to the backend API. Please ensure the Express server is running on port 3000." });
+            dispatch({ type: 'FETCH_FAILURE', payload: "Could not connect to the backend API. Please ensure the Express server is running." });
         }
     }, []);
 
@@ -131,16 +122,14 @@ const App = () => {
         fetchCourses();
     }, [fetchCourses]);
 
-    // --- CRUD Handlers ---
-    
-    // Initiates the edit form with pre-filled data
     const handleEditClick = (course) => {
         dispatch({ type: 'OPEN_EDIT_FORM', payload: course });
     };
 
     const handleDelete = async (courseId, courseName) => {
-        // Custom modal confirmation to replace window.confirm() as per instructions
-        if (!confirmDeletion(courseName)) {
+        const isConfirmed = window.confirm(`Are you sure you want to delete the course "${courseName}"? This action cannot be undone.`);
+        
+        if (!isConfirmed) {
             return;
         }
 
@@ -169,22 +158,13 @@ const App = () => {
             dispatch({ type: 'SET_FORM_MESSAGE', payload: { type: 'error', text: `Deletion failed: ${e.message}` } });
         }
     };
-    
-    const confirmDeletion = (courseName) => {
-        // NOTE: In a real app, this would use a proper modal component, 
-        // but for now we'll use a simple utility function.
-        const message = `Are you sure you want to delete the course "${courseName}"? This action cannot be undone. Type 'yes' to confirm.`;
-        return prompt(message) === 'yes'; 
-    };
-
-
-    // --- Form Handlers ---
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         
-        // Determine the value type for number fields
-        const processedValue = (name === 'number' || name === 'credits') ? Number(value) : value;
+        const processedValue = (name === 'number' || name === 'credits')
+            ? (value === '' ? '' : Number(value))
+            : value;
         
         dispatch({ 
             type: 'SET_FORM_FIELD', 
@@ -202,8 +182,7 @@ const App = () => {
             payload: { type: 'loading', text: isEditing ? 'Updating course...' : 'Adding course...' } 
         });
 
-        // Simple validation based on Stage 1 requirements
-        if (!courseFormData.name || !courseFormData.subject || !courseFormData.number || !courseFormData.credits) {
+        if (!courseFormData.name || !courseFormData.subject || courseFormData.number === '' || courseFormData.credits === '') {
             dispatch({ type: 'SET_FORM_MESSAGE', payload: { type: 'error', text: 'Please fill in all required fields (Name, Subject, Number, Credits).' } });
             return;
         }
@@ -221,17 +200,16 @@ const App = () => {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.message || JSON.stringify(result));
+                throw new Error(result.message || `Server error: ${response.statusText}`);
             }
+
+            const actionType = isEditing ? 'COURSE_UPDATED_SUCCESS' : 'COURSE_ADDED_SUCCESS';
+            dispatch({ type: actionType, payload: result });
 
             dispatch({ 
                 type: 'SET_FORM_MESSAGE', 
                 payload: { type: 'success', text: `Course "${result.name}" ${isEditing ? 'updated' : 'added'} successfully!` }
             });
-            
-            // Close form and refresh list
-            closeForm();
-            fetchCourses();
 
         } catch (e) {
             console.error("Failed to submit course:", e);
@@ -242,8 +220,6 @@ const App = () => {
     const closeForm = () => {
         dispatch({ type: 'CLOSE_FORM' });
     }
-
-    // --- UI Components ---
 
     const NavBar = () => (
         <nav className="bg-indigo-700 shadow-lg">
@@ -262,7 +238,7 @@ const App = () => {
                                 onClick={() => dispatch({ type: 'SET_VIEW', payload: 'schedule' })}
                                 className={`px-3 py-2 rounded-md text-sm font-medium transition duration-150 ${activeView === 'schedule' ? 'bg-indigo-800 text-white shadow-inner' : 'text-indigo-200 hover:bg-indigo-600 hover:text-white'}`}
                             >
-                                My Schedule (Stage 2)
+                                My Schedule 
                             </button>
                         </div>
                     </div>
@@ -271,7 +247,7 @@ const App = () => {
                             Role: <span className="font-semibold capitalize">{MOCK_USER_ROLE}</span>
                         </span>
                         <button className="px-3 py-1 bg-red-500 text-white text-sm font-medium rounded-md shadow-sm hover:bg-red-600 transition duration-150">
-                            Login / Logout (Stage 2)
+                            Login / Logout 
                         </button>
                     </div>
                 </div>
@@ -286,6 +262,10 @@ const App = () => {
 
         if (error) {
             return <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md m-4" role="alert">{error}</div>;
+        }
+
+        if (!loading && formMessage.type === 'success' && !isFormOpen) {
+             return <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-md m-4" role="alert">{formMessage.text}</div>;
         }
 
         if (courses.length === 0) {
@@ -309,23 +289,18 @@ const App = () => {
                                 {course.credits} Credits
                             </span>
                             
-                            {/* Teacher CRUD Actions for Stage 1 */}
                             <div className="space-x-2">
                                 <button
                                     onClick={() => handleEditClick(course)}
                                     className="text-indigo-600 bg-indigo-100 p-2 rounded-full hover:bg-indigo-200 transition duration-150 shadow-md"
-                                    title="Edit Course"
                                 >
-                                    {/* Edit Icon */}
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                    Edit
                                 </button>
                                 <button
                                     onClick={() => handleDelete(course._id, course.name)}
                                     className="text-red-600 bg-red-100 p-2 rounded-full hover:bg-red-200 transition duration-150 shadow-md"
-                                    title="Delete Course"
                                 >
-                                    {/* Delete Icon */}
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    Delete
                                 </button>
                             </div>
                         </div>
@@ -348,7 +323,7 @@ const App = () => {
                             onClick={closeForm}
                             className="text-gray-400 hover:text-gray-600 transition p-1 rounded-full hover:bg-gray-100"
                         >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            X
                         </button>
                     </div>
 
@@ -396,7 +371,7 @@ const App = () => {
                                         onChange={handleInputChange}
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"
                                         min="0"
-                                        max="999"
+                                        max="9999"
                                         required
                                     />
                                 </div>
@@ -411,7 +386,7 @@ const App = () => {
                                 value={courseFormData.credits || ''}
                                 onChange={handleInputChange}
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border"
-                                min="1"
+                                min="0"
                                 max="5"
                                 required
                             />
@@ -434,11 +409,11 @@ const App = () => {
                                 onClick={closeForm}
                                 className="px-5 py-2 bg-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-400 transition duration-150"
                             >
-                                Cancel
+                                {formMessage.type === 'success' ? 'Close' : 'Cancel'}
                             </button>
                             <button
                                 type="submit"
-                                disabled={formMessage.type === 'loading'}
+                                disabled={formMessage.type === 'loading' || formMessage.type === 'success'}
                                 className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
                             >
                                 {formMessage.type === 'loading' ? 'Processing...' : isEditing ? 'Update Course' : 'Create Course'}
@@ -450,6 +425,19 @@ const App = () => {
         );
     }
 
+    const MainMessage = () => {
+        if (isFormOpen || !formMessage.text) return null;
+
+        if (formMessage.type === 'success') {
+             return <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-md mb-6" role="alert">{formMessage.text}</div>;
+        }
+        
+        if (formMessage.type === 'error' && error) {
+             return <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-6" role="alert">{formMessage.text}</div>;
+        }
+
+        return null;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
@@ -460,7 +448,7 @@ const App = () => {
                     {activeView === 'catalog' ? 'Available Course Catalog' : 'My Student Schedule'}
                 </h1>
                 <p className="text-gray-600">
-                    {activeView === 'catalog' ? 'Manage the complete list of available courses with Teacher privileges.' : 'Your enrolled courses and search functionality will appear here in Stage 2.'}
+                    {activeView === 'catalog' ? 'Manage the complete list of available courses.' : 'Your enrolled courses and search functionality will appear here in Stage 2.'}
                 </p>
             </header>
 
@@ -469,16 +457,17 @@ const App = () => {
                     <>
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-semibold text-gray-800">
-                                {courses.length} Courses Listed
+                                {loading ? 'Loading...' : `${courses.length} Courses Listed`}
                             </h2>
                             <button
                                 onClick={() => dispatch({ type: 'OPEN_ADD_FORM' })}
                                 className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg font-semibold shadow-lg hover:bg-green-600 transition duration-150"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                                <span>Add New Course</span>
+                                <span>+ Add New Course</span>
                             </button>
                         </div>
+                        
+                        <MainMessage />
 
                         <CourseList />
                     </>
