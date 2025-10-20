@@ -18,8 +18,6 @@ const initialState = {
     
     user: storedUser,
     token: storedToken,
-    isAuthModalOpen: false,
-    authView: 'login', 
     authError: null,
     
     schedule: [],
@@ -35,14 +33,13 @@ const initialState = {
 function courseReducer(state, action) {
     switch (action.type) {
         case 'SET_VIEW':
-            return { ...state, activeView: action.payload, error: null };
+            return { ...state, activeView: action.payload, error: null, authError: null };
             
-        case 'OPEN_AUTH_MODAL':
-            return { ...state, isAuthModalOpen: true, authView: action.payload, authError: null };
-        case 'CLOSE_AUTH_MODAL':
-            return { ...state, isAuthModalOpen: false, authError: null };
-        case 'SET_AUTH_VIEW':
-            return { ...state, authView: action.payload, authError: null };
+        case 'SHOW_LOGIN_PAGE':
+            return { ...state, activeView: 'login', authError: null };
+        case 'SHOW_REGISTER_PAGE':
+            return { ...state, activeView: 'register', authError: null };
+            
         case 'AUTH_START':
             return { ...state, authError: null };
         case 'AUTH_SUCCESS':
@@ -50,10 +47,10 @@ function courseReducer(state, action) {
             localStorage.setItem('user', JSON.stringify(action.payload.user));
             return { 
                 ...state, 
-                isAuthModalOpen: false, 
                 authError: null,
                 user: action.payload.user,
                 token: action.payload.token,
+                activeView: 'catalog',
             };
         case 'AUTH_FAILURE':
             return { ...state, authError: action.payload };
@@ -152,12 +149,20 @@ const NavBar = ({ user, activeView, dispatch }) => (
                             Logout
                         </button>
                     ) : (
-                        <button 
-                            onClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-                            className="px-3 py-1 bg-green-500 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-600 transition duration-150"
-                        >
-                            Login
-                        </button>
+                        <div className="flex items-center space-x-2">
+                            <button 
+                                onClick={() => dispatch({ type: 'SHOW_LOGIN_PAGE' })}
+                                className="px-3 py-1 bg-green-500 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-600 transition duration-150"
+                            >
+                                Login
+                            </button>
+                            <button 
+                                onClick={() => dispatch({ type: 'SHOW_REGISTER_PAGE' })}
+                                className="px-3 py-1 bg-gray-100 text-indigo-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-200 transition duration-150"
+                            >
+                                Register
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -344,7 +349,60 @@ const CourseForm = ({ currentCourseToEdit, formMessage, courseFormData, handleFo
     );
 };
 
-const AuthModal = ({ authView, authError, dispatch, handleAuthSubmit }) => {
+const LoginPage = ({ authError, dispatch, handleAuthSubmit }) => {
+    const [formData, setFormData] = useState({ username: '', password: '' });
+    
+    const handleInputChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        handleAuthSubmit(formData, 'login');
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-3">
+                <h2 className="text-2xl font-bold text-gray-800">Login to Your Account</h2>
+            </div>
+
+            {authError && (
+                <div className="bg-red-100 text-red-700 border border-red-400 p-3 mb-4 rounded-lg text-sm font-medium">
+                    {authError}
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Username*</label>
+                    <input type="text" name="username" value={formData.username} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Password*</label>
+                    <input type="password" name="password" value={formData.password} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
+                </div>
+                <div className="pt-4 flex justify-between items-center">
+                    <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'SHOW_REGISTER_PAGE' })}
+                        className="text-sm text-indigo-600 hover:underline"
+                    >
+                        Need an account? Register
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-lg hover:bg-indigo-700 transition duration-150"
+                    >
+                        Login
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+const RegisterPage = ({ authError, dispatch, handleAuthSubmit }) => {
     const [formData, setFormData] = useState({ username: '', password: '', email: '', role: 'student' });
     
     const handleInputChange = (e) => {
@@ -353,67 +411,57 @@ const AuthModal = ({ authView, authError, dispatch, handleAuthSubmit }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        handleAuthSubmit(formData, authView);
+        handleAuthSubmit(formData, 'register');
     };
 
-    const isLogin = authView === 'login';
-    const title = isLogin ? 'Login to Your Account' : 'Create a New Account';
-
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md transform transition-all duration-300">
-                <div className="flex justify-between items-center mb-6 border-b pb-3">
-                    <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-                    <button onClick={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })} className="text-gray-400 hover:text-gray-600 transition p-1 rounded-full hover:bg-gray-100">X</button>
-                </div>
-
-                {authError && (
-                    <div className="bg-red-100 text-red-700 border border-red-400 p-3 mb-4 rounded-lg text-sm font-medium">
-                        {authError}
-                    </div>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {!isLogin && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Email*</label>
-                            <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
-                        </div>
-                    )}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Username*</label>
-                        <input type="text" name="username" value={formData.username} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Password*</label>
-                        <input type="password" name="password" value={formData.password} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
-                    </div>
-                    {!isLogin && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Role</label>
-                            <select name="role" value={formData.role} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
-                                <option value="student">Student</option>
-                                <option value="teacher">Teacher</option>
-                            </select>
-                        </div>
-                    )}
-                    <div className="pt-4 flex justify-between items-center">
-                        <button
-                            type="button"
-                            onClick={() => dispatch({ type: 'SET_AUTH_VIEW', payload: isLogin ? 'register' : 'login' })}
-                            className="text-sm text-indigo-600 hover:underline"
-                        >
-                            {isLogin ? 'Need an account? Register' : 'Already have an account? Login'}
-                        </button>
-                        <button
-                            type="submit"
-                            className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-lg hover:bg-indigo-700 transition duration-150"
-                        >
-                            {isLogin ? 'Login' : 'Register'}
-                        </button>
-                    </div>
-                </form>
+        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-auto">
+            <div className="flex justify-between items-center mb-6 border-b pb-3">
+                <h2 className="text-2xl font-bold text-gray-800">Create a New Account</h2>
             </div>
+
+            {authError && (
+                <div className="bg-red-100 text-red-700 border border-red-400 p-3 mb-4 rounded-lg text-sm font-medium">
+                    {authError}
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Email*</label>
+                    <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Username*</label>
+                    <input type="text" name="username" value={formData.username} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Password*</label>
+                    <input type="password" name="password" value={formData.password} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <select name="role" value={formData.role} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2.5 border bg-white">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <div className="pt-4 flex justify-between items-center">
+                    <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'SHOW_LOGIN_PAGE' })}
+                        className="text-sm text-indigo-600 hover:underline"
+                    >
+                        Already have an account? Login
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-5 py-2 bg-indigo-600 text-white rounded-lg font-semibold shadow-lg hover:bg-indigo-700 transition duration-150"
+                    >
+                        Register
+                    </button>
+                </div>
+            </form>
         </div>
     );
 };
@@ -424,7 +472,7 @@ const App = () => {
     const { 
         courses, loading, error, isFormOpen, activeView, 
         currentCourseToEdit, formMessage, courseFormData,
-        user, token, isAuthModalOpen, authView, authError,
+        user, token, authError,
         schedule, isScheduleLoading, searchTerm
     } = state;
 
@@ -616,14 +664,36 @@ const App = () => {
             
             <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mb-8">
                 <h1 className="text-3xl font-extrabold text-gray-900">
-                    {activeView === 'catalog' ? 'Available Course Catalog' : 'My Student Schedule'}
+                    {activeView === 'catalog' ? 'Available Course Catalog' :
+                     activeView === 'schedule' ? 'My Student Schedule' :
+                     activeView === 'login' ? 'Account Login' :
+                     'Create Account'} 
                 </h1>
                 <p className="text-gray-600">
-                    {activeView === 'catalog' ? 'Browse all available courses.' : 'Manage your enrolled courses.'}
+                    {activeView === 'catalog' ? 'Browse all available courses.' :
+                     activeView === 'schedule' ? 'Manage your enrolled courses.' :
+                     activeView === 'login' ? 'Please log in to continue.' :
+                     'Please register to create an account.'}
                 </p>
             </header>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+                {activeView === 'login' && (
+                    <LoginPage
+                        authError={authError}
+                        dispatch={dispatch}
+                        handleAuthSubmit={handleAuthSubmit}
+                    />
+                )}
+                
+                {activeView === 'register' && (
+                    <RegisterPage
+                        authError={authError}
+                        dispatch={dispatch}
+                        handleAuthSubmit={handleAuthSubmit}
+                    />
+                )}
+            
                 {activeView === 'catalog' && (
                     <>
                         <div className="flex justify-between items-center mb-6">
@@ -674,20 +744,18 @@ const App = () => {
                 )}
                 
                 {activeView === 'schedule' && (
-                    <>
-                        {!user ? (
-                            <div className="bg-white p-8 rounded-xl shadow-lg text-center">
-                                <p className="text-gray-600 font-medium">Please login to view your schedule.</p>
-                            </div>
-                        ) : (
-                            <ScheduleList
-                                loading={isScheduleLoading}
-                                error={error}
-                                schedule={schedule}
-                                handleDrop={handleDrop}
-                            />
-                        )}
-                    </>
+                    !user ? (
+                        <div className="bg-white p-8 rounded-xl shadow-lg text-center">
+                            <p className="text-gray-600 font-medium">Please login to view your schedule.</p>
+                        </div>
+                    ) : (
+                        <ScheduleList
+                            loading={isScheduleLoading}
+                            error={error}
+                            schedule={schedule}
+                            handleDrop={handleDrop}
+                        />
+                    )
                 )}
             </main>
 
@@ -702,14 +770,6 @@ const App = () => {
                 />
             )}
             
-            {isAuthModalOpen && (
-                <AuthModal
-                    authView={authView}
-                    authError={authError}
-                    dispatch={dispatch}
-                    handleAuthSubmit={handleAuthSubmit}
-                />
-            )}
         </div>
     );
 };
